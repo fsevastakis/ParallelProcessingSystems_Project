@@ -8,7 +8,7 @@
 #PBS -e run_fw.err
 
 ## How many machines should we get? 
-#PBS -l nodes=1:ppn=8
+#PBS -l nodes=1:ppn=64
 
 ##How long should the job run for?
 #PBS -l walltime=00:10:00
@@ -17,8 +17,9 @@
 ## Run make in the src folder (modify properly)
 
 module load openmp
-cd <FIX_PATH>
-export OMP_NUM_THREADS=8
-./fw <SIZE>
-# ./fw_sr <SIZE> <BSIZE>
+cd $PBS_O_WORKDIR
+export OMP_NUM_THREADS=64
+export GOMP_CPU_AFFINITY='0-63'
+#./fw 2048
+./fw_sr 1024 128
 # ./fw_tiled <SIZE> <BSIZE>

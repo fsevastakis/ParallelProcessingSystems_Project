@@ -16,5 +16,5 @@
 ## Start 
 ## Run make in the src folder (modify properly)
 
-cd  <FIX_PATH>
+cd $PBS_O_WORKDIR
 make

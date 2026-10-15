@@ -5,6 +5,7 @@
 #include "mpi.h"
 #include "utils.h"
 
+
 int main(int argc, char ** argv) {
     int rank,size;
     int global[2],local[2]; //global matrix dimensions and local matrix dimensions (2D-domain, 2D-subdomain)
@@ -17,9 +18,9 @@ int main(int argc, char ** argv) {
 
     struct timeval tts,ttf,tcs,tcf;   //Timers: total-> tts,ttf, computation -> tcs,tcf
     double ttotal=0,tcomp=0,total_time,comp_time;
-    
+    int test;   
     double ** U, ** u_current, ** u_previous, ** swap; //Global matrix, local current and previous matrices, pointer to swap between current and previous
-    
+   
 
     MPI_Init(&argc,&argv);
     MPI_Comm_size(MPI_COMM_WORLD,&size);
@@ -51,17 +52,21 @@ int main(int argc, char ** argv) {
     //----Compute local 2D-subdomain dimensions----//
     //----Test if the 2D-domain can be equally distributed to all processes----//
     //----If not, pad 2D-domain----//
-    
+
+    int pad[2];		// used later for the jacobi-for-loops' boundries
     for (i=0;i<2;i++) {
         if (global[i]%grid[i]==0) {
             local[i]=global[i]/grid[i];
             global_padded[i]=global[i];
-        }
+            pad[i]=0;
+	}
         else {
             local[i]=(global[i]/grid[i])+1;
             global_padded[i]=local[i]*grid[i];
+	    pad[i]=global_padded[i]-global[i];
         }
     }
+
 
 	//Initialization of omega
     omega=2.0/(1+sin(3.14/global[0]));
@@ -100,7 +105,9 @@ int main(int argc, char ** argv) {
 
     //----Rank 0 defines positions and counts of local blocks (2D-subdomains) on global matrix----//
     int * scatteroffset, * scattercounts;
+    double ** U_start;
     if (rank==0) {
+	U_start=&U[0][0];
         scatteroffset=(int*)malloc(size*sizeof(int));
         scattercounts=(int*)malloc(size*sizeof(int));
         for (i=0;i<grid[0];i++)
@@ -126,11 +133,8 @@ int main(int argc, char ** argv) {
 	/*Make sure u_current and u_previous are
 		both initialized*/
 
-
-
-
-
-
+    MPI_Scatterv(U_start, scattercounts, scatteroffset, global_block, &u_previous[1][1], 1, local_block, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(U_start, scattercounts, scatteroffset, global_block, &u_current[1][1], 1, local_block, 0, MPI_COMM_WORLD);
 
      //************************************//
 
@@ -148,11 +152,18 @@ int main(int argc, char ** argv) {
 
 	/*Fill your code here*/
 
+    
+    // Halo datatypes: h_block = one interior row (local[1] contiguous doubles),
+    // v_block = one interior column (local[0] doubles, one per row of length local[1]+2).
+    MPI_Datatype h_block;
+    MPI_Type_vector(1,local[1],0,MPI_DOUBLE,&dummy);
+    MPI_Type_create_resized(dummy,0,sizeof(double),&h_block);
+    MPI_Type_commit(&h_block);
 
-
-
-
-
+    MPI_Datatype v_block;
+    MPI_Type_vector(local[0],1,local[1]+2,MPI_DOUBLE,&dummy);
+    MPI_Type_create_resized(dummy,0,sizeof(double),&v_block);
+    MPI_Type_commit(&v_block);
 
 
 	//************************************//
@@ -161,7 +172,9 @@ int main(int argc, char ** argv) {
     //----Find the 4 neighbors with which a process exchanges messages----//
 
 	//*************TODO*******************//
-    int north, south, east, west;
+    // 99 marks a missing neighbour (process on the global boundary). Fine for the <= 64
+    // processes we ran; MPI_PROC_NULL would be the general choice.
+    int north = 99, south = 99, east = 99, west = 99;
 
 
 
@@ -171,11 +184,14 @@ int main(int argc, char ** argv) {
 	/*Make sure you handle non-existing
 		neighbors appropriately*/
 
-
-
-
+    int coord[2];
+    if (rank_grid[0] != 0) {coord[0] = rank_grid[0]-1; coord[1] = rank_grid[1]; MPI_Cart_rank(CART_COMM, coord, &north);}
+    if (rank_grid[0] != grid[0] - 1) {coord[0] = rank_grid[0]+1; coord[1] = rank_grid[1]; MPI_Cart_rank(CART_COMM, coord, &south);}
+    if (rank_grid[1] != 0) {coord[0] = rank_grid[0]; coord[1] = rank_grid[1]-1; MPI_Cart_rank(CART_COMM, coord, &west);}
+    if (rank_grid[1] != grid[1] - 1) {coord[0] = rank_grid[0]; coord[1] = rank_grid[1]+1; MPI_Cart_rank(CART_COMM, coord, &east);}
 
 	//************************************//
+//printf("My rank is %d, my coords are (%d, %d) and my neighbours are: %d (north), %d (south), %d (east), %d (west) \n", rank, rank_grid[0], rank_grid[1], north, south, east, west);
 
 
 
@@ -188,8 +204,14 @@ int main(int argc, char ** argv) {
 
 	/*Fill your code here*/
 
-
-
+	
+    // Local row/column 1 of a process on the north/west edge is the fixed global boundary,
+    // so it starts at 2. On the south/east edge the last pad[] rows/columns are padding and
+    // the one before them is the boundary, so it stops at local - pad - 1.
+    (rank_grid[0] != 0) ? (i_min = 1) : (i_min = 2);	// north boundry ?
+    (rank_grid[1] != 0) ? (j_min = 1) : (j_min = 2);	// west boundry ?
+    (rank_grid[0] != grid[0] - 1) ? (i_max = local[0]) : (i_max = local[0] - pad[0] - 1);	// south boundry ? 
+    (rank_grid[1] != grid[1] - 1) ? (j_max = local[1]) : (j_max = local[1] - pad[1] - 1); 	// east boundry ? 
 
 
 	/*Three types of ranges:
@@ -199,12 +221,12 @@ int main(int argc, char ** argv) {
 	*/
 
 
-
+//printf("My rank is %d and my boundries are: i -> (%d, %d), j -> (%d, %d) \n", rank, i_min, i_max, j_min, j_max);
 
 
 	//************************************//
 
-
+    MPI_Barrier(MPI_COMM_WORLD);
 
 
  	//----Computational core----//   
@@ -233,40 +255,92 @@ int main(int argc, char ** argv) {
 
 		/*Add appropriate timers for computation*/
 	
+    int lastrow = local[0];
+    int lastcol = local[1];
 
-		
+    // Halos are exchanged on u_current (the last iteration's result) and the arrays are
+    // swapped afterwards, so the stencil reads u_previous with fresh ghost cells.
+    MPI_Request requests[8];
+    int count = 0;
+
+    // Senders //
+    if (north != 99) {
+	MPI_Isend(&u_current[1][1], 1, h_block, north, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (south != 99) {
+	MPI_Isend(&u_current[lastrow][1], 1, h_block, south, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (west != 99) {
+	MPI_Isend(&u_current[1][1], 1, v_block, west, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (east != 99) {
+	MPI_Isend(&u_current[1][lastcol], 1, v_block, east, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+
+    // Receivers //
+    if (north != 99) {
+	MPI_Irecv(&u_current[0][1], 1, h_block, north, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (south != 99) {
+	MPI_Irecv(&u_current[lastrow+1][1], 1, h_block, south, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (west != 99) {
+	MPI_Irecv(&u_current[1][0], 1, v_block, west, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+    if (east != 99) {
+	MPI_Irecv(&u_current[1][lastcol+1], 1, v_block, east, 0, MPI_COMM_WORLD, &requests[count]);
+	count++;
+    }
+
+    MPI_Waitall(count, requests, MPI_STATUSES_IGNORE);
 
 
+    swap=u_previous;
+    u_previous=u_current;
+    u_current=swap;
 
 
+    gettimeofday(&tcs,NULL);
+
+    //Jacobi
+    int i,j;
+    for (i=i_min; i<=i_max; i++)
+	for (j=j_min; j<=j_max; j++)
+            u_current[i][j]=(u_previous[i-1][j]+u_previous[i+1][j]+u_previous[i][j-1]+u_previous[i][j+1])/4.0;
 
 
-
-
-
-
-
-
-
-
+    gettimeofday(&tcf,NULL);
+    tcomp+=(tcf.tv_sec-tcs.tv_sec)+(tcf.tv_usec-tcs.tv_usec)*0.000001;
 
 
 
 		#ifdef TEST_CONV
-        if (t%C==0) {
+	        if (t%C==0) {
 			//*************TODO**************//
 			/*Test convergence*/
-
-
-		}		
+			converged = converge(u_previous,u_current,i_min,i_max,j_min,j_max);
+			MPI_Allreduce(&converged,&global_converged,1,MPI_INT,MPI_MIN,MPI_COMM_WORLD);
+//		printf("Round %d: Rank %d, converged %d \n", t, rank, converged);
+		}
 		#endif
 
 
 		//************************************//
  
          
-        
+    // Keeps all processes in step every iteration. Not needed for correctness (the halo
+    // exchange already synchronises neighbours), and it is counted in the total time.
+    MPI_Barrier(MPI_COMM_WORLD);
+       
     }
+//    printf("Rank %d, converged %d \n", rank, converged);
     gettimeofday(&ttf,NULL);
 
     ttotal=(ttf.tv_sec-tts.tv_sec)+(ttf.tv_usec-tts.tv_usec)*0.000001;
@@ -280,6 +354,7 @@ int main(int argc, char ** argv) {
    
     if (rank==0) {
             U=allocate2d(global_padded[0],global_padded[1]);
+	    U_start=&U[0][0];
     }
 
 
@@ -290,12 +365,7 @@ int main(int argc, char ** argv) {
 	/*Fill your code here*/
 
 
-
-
-
-
-
-
+    MPI_Gatherv(&(u_current[1][1]), 1, local_block, U_start, scattercounts, scatteroffset, global_block, 0, MPI_COMM_WORLD);
 
 
      //************************************//

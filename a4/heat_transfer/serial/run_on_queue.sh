@@ -10,11 +10,11 @@
 ## How many machines should we get?
 #PBS -l nodes=1:ppn=1
 
-#PBS -l walltime=00:05:00
+#PBS -l walltime=00:15:00
 
 ## Start 
 ## Run make in the src folder (modify properly)
-cd <FIX PATH>
-./jacobi 256
-./seidelsor 256
-./redblacksor 256
+cd $PBS_O_WORKDIR
+./jacobi 1024
+#./seidelsor 1024
+#./redblacksor 1024

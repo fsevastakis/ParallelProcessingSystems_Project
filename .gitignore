@@ -1,0 +1,30 @@
+# Build artifacts
+*.o
+a1/omp_Game_Of_Life
+a2/FW/fw
+a2/FW/fw_sr
+a2/FW/fw_tiled
+a2/kmeans/kmeans_seq
+a2/kmeans/kmeans_omp_*
+a2/conc_ll/x.*
+a3/kmeans/kmeans_seq
+a3/kmeans/kmeans_cuda_*
+a4/kmeans/kmeans_mpi
+a4/heat_transfer/serial/jacobi
+a4/heat_transfer/serial/seidelsor
+a4/heat_transfer/serial/redblacksor
+a4/heat_transfer/mpi/jacobi
+a4/heat_transfer/mpi/seidelsor
+a4/heat_transfer/mpi/redblacksor
+
+# PBS job output and run results
+*.out
+*.err
+*.er
+outrunjob*
+errorrunjob*
+outmakejob*
+errormakejob*
+a3/kmeans/Execution_logs/*.csv
+res*MPI_*
+res*Naive_*

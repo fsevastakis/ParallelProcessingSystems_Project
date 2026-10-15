@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
+#include <omp.h>
+
 #define FINALIZE "\
 convert -delay 20 `ls -1 out*.pgm | sort -V` output.gif\n\
 rm *pgm\n\
@@ -60,6 +62,12 @@ int main (int argc, char * argv[]) {
 
 	gettimeofday(&ts,NULL);
 	for ( t = 0 ; t < T ; t++ ) {
+
+		// Rows are split among the threads. Each cell reads only "previous" and writes only its own
+		// cell of "current", so no synchronisation is needed; the implicit barrier at the end of the
+		// loop finishes the generation before the swap. j and nbrs must be private (i is anyway).
+		#pragma omp parallel for private(nbrs, i, j)
+
 		for ( i = 1 ; i < N-1 ; i++ )
 			for ( j = 1 ; j < N-1 ; j++ ) {
 				nbrs = previous[i+1][j+1] + previous[i+1][j] + previous[i+1][j-1] \

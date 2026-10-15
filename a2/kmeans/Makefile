@@ -17,7 +17,14 @@ LOCKS_FLAGS = -I$(LOCKS_PREFIX)
 
 # all: kmeans_seq
 # all: kmeans_seq kmeans_omp_naive kmeans_omp_reduction
-all:  kmeans_omp_naive kmeans_omp_critical kmeans_omp_nosync_lock kmeans_omp_pthread_mutex_lock kmeans_omp_pthread_spin_lock kmeans_omp_tas_lock kmeans_omp_ttas_lock kmeans_omp_array_lock kmeans_omp_clh_lock
+all:  kmeans_seq kmeans_omp_naive_delta kmeans_omp_reduction kmeans_omp_naive kmeans_omp_critical kmeans_omp_nosync_lock kmeans_omp_pthread_mutex_lock kmeans_omp_pthread_spin_lock kmeans_omp_tas_lock kmeans_omp_ttas_lock kmeans_omp_array_lock kmeans_omp_clh_lock
+
+kmeans_seq: main.o file_io.o util.o seq_kmeans.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+kmeans_omp_naive_delta: main.o file_io.o util.o omp_naive_kmeans_delta.o
+	$(CC) $(OMPFLAGS) $^ -o $@ $(LDFLAGS)
+kmeans_omp_reduction: main.o file_io.o util.o omp_reduction_kmeans.o
+	$(CC) $(OMPFLAGS) $^ -o $@ $(LDFLAGS)
 
 kmeans_omp_naive: main.o file_io.o util.o omp_naive_kmeans.o
 	$(CC) $(OMPFLAGS) $^ -o $@ $(LDFLAGS)
@@ -43,6 +50,10 @@ kmeans_omp_clh_lock: main.o file_io.o util.o omp_lock_kmeans.o $(LOCKS_PREFIX)/c
 main.o: main.c $(H_FILES)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+seq_kmeans.o: seq_kmeans.c $(COMM_SRC) $(H_FILES)
+	$(CC) $(CFLAGS) -c $< -o $@
+omp_naive_kmeans_delta.o: omp_naive_kmeans_delta.c $(COMM_SRC) $(H_FILES)
+	$(CC) $(OMPFLAGS) -c $< -o $@
 omp_naive_kmeans.o: omp_naive_kmeans.c $(COMM_SRC) $(H_FILES)
 	$(CC) $(OMPFLAGS) -c $< -o $@
 omp_critical_kmeans.o: omp_critical_kmeans.c $(COMM_SRC) $(H_FILES)
@@ -54,9 +65,9 @@ omp_lock_kmeans.o: omp_lock_kmeans.c $(COMM_SRC) $(H_FILES)
 
 
 file_io.o: file_io.c
-	$(CC) $(CFLAGS) -c $< -o $@
+#	$(CC) $(CFLAGS) -c $< -o $@
 # Hint : why is OMPFLAGS used here?	(when using it, need to include -fopenmp to LDFLAGS too)
-# 	$(CC) $(OMPFLAGS) -c $< -o $@
+	$(CC) $(OMPFLAGS) -c $< -o $@
 
 util.o: util.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -79,4 +90,4 @@ $(LOCKS_PREFIX)/clh_lock.o: $(LOCKS_PREFIX)/clh_lock.c
 
 
 clean:
-	rm -rf *.o kmeans_omp_naive kmeans_omp_critical kmeans_omp_nosync_lock kmeans_omp_pthread_mutex_lock kmeans_omp_pthread_spin_lock kmeans_omp_tas_lock kmeans_omp_ttas_lock kmeans_omp_array_lock kmeans_omp_clh_lock locks/*.o 
+	rm -rf *.o kmeans_seq kmeans_omp_naive_delta kmeans_omp_reduction kmeans_omp_naive kmeans_omp_critical kmeans_omp_nosync_lock kmeans_omp_pthread_mutex_lock kmeans_omp_pthread_spin_lock kmeans_omp_tas_lock kmeans_omp_ttas_lock kmeans_omp_array_lock kmeans_omp_clh_lock locks/*.o 
